@@ -2,16 +2,16 @@
 //--------------------------------------------------------------------------------------------------------
 // Module  : sd_reader
 // Type    : synthesizable, IP's top
-// Standard: SystemVerilog 2005 (IEEE1800-2005)
-// Function: A SD-host to initialize SDcard and read sector
-// Compatibility: CardType : SDv1.1 , SDv2  or SDHCv2
+// Standard: Verilog 2001 (IEEE1364-2001)
+// Function: A SD-host to initialize SD-card and read sector
+//           Support CardType   : SDv1.1 , SDv2  or SDHCv2
 //--------------------------------------------------------------------------------------------------------
 
 module sd_reader # (
-    parameter [2:0] CLK_DIV = 3'd1,     // when clk =   0~ 25MHz , set CLK_DIV = 3'd0,
-                                        // when clk =  25~ 50MHz , set CLK_DIV = 3'd1,
-                                        // when clk =  50~100MHz , set CLK_DIV = 3'd2,
-                                        // when clk = 100~200MHz , set CLK_DIV = 3'd3,
+    parameter [2:0] CLK_DIV = 3'd2,     // when clk =   0~ 25MHz , set CLK_DIV = 3'd1,
+                                        // when clk =  25~ 50MHz , set CLK_DIV = 3'd2,
+                                        // when clk =  50~100MHz , set CLK_DIV = 3'd3,
+                                        // when clk = 100~200MHz , set CLK_DIV = 3'd4,
                                         // ......
     parameter       SIMULATE = 0
 ) (
@@ -37,43 +37,67 @@ module sd_reader # (
     output reg  [ 7:0]  outbyte            // a byte of sector content
 );
 
-initial {outen, outaddr, outbyte} = '0;
+
+initial {outen, outaddr, outbyte} = 0;
 
 localparam [1:0] UNKNOWN = 2'd0,      // SD card type
                  SDv1    = 2'd1,
                  SDv2    = 2'd2,
                  SDHCv2  = 2'd3;
 
-localparam [15:0] FASTCLKDIV = 16'd1 << CLK_DIV ;
-localparam [15:0] SLOWCLKDIV = FASTCLKDIV * (SIMULATE ? 16'd2 : 16'd48);
+localparam [15:0] FASTCLKDIV = (16'd1 << CLK_DIV) ;
+localparam [15:0] SLOWCLKDIV = FASTCLKDIV * (SIMULATE ? 16'd5 : 16'd48);
 
 reg        start  = 1'b0;
-reg [15:0] precnt = '0;
-reg [ 5:0] cmd    = '0;
-reg [31:0] arg    = '0;
+reg [15:0] precnt = 0;
+reg [ 5:0] cmd    = 0;
+reg [31:0] arg    = 0;
 reg [15:0] clkdiv = SLOWCLKDIV;
-reg [31:0] rsectoraddr = '0;
+reg [31:0] rsectoraddr = 0;
 
 wire       busy, done, timeout, syntaxe;
 wire[31:0] resparg;
 
 reg        sdv1_maybe = 1'b0;
-reg [ 2:0] cmd8_cnt   = '0;
-reg [15:0] rca = '0;
+reg [ 2:0] cmd8_cnt   = 0;
+reg [15:0] rca = 0;
 
-enum logic [3:0] {CMD0, CMD8, CMD55_41, ACMD41, CMD2, CMD3, CMD7, CMD16, CMD17, READING, READING2} sdcmd_stat = CMD0;
+localparam [3:0] CMD0      = 4'd0,
+                 CMD8      = 4'd1,
+                 CMD55_41  = 4'd2,
+                 ACMD41    = 4'd3,
+                 CMD2      = 4'd4,
+                 CMD3      = 4'd5,
+                 CMD7      = 4'd6,
+                 CMD16     = 4'd7,
+                 CMD17     = 4'd8,
+                 READING   = 4'd9,
+                 READING2  = 4'd10;
+
+reg [3:0] sdcmd_stat = CMD0;
+//enum logic [3:0] {CMD0, CMD8, CMD55_41, ACMD41, CMD2, CMD3, CMD7, CMD16, CMD17, READING, READING2} sdcmd_stat = CMD0;
 
 reg        sdclkl = 1'b0;
-enum logic [2:0] {RWAIT, RDURING, RTAIL, RDONE, RTIMEOUT} sddat_stat = RWAIT;
+
+localparam [2:0] RWAIT    = 3'd0,
+                 RDURING  = 3'd1,
+                 RTAIL    = 3'd2,
+                 RDONE    = 3'd3,
+                 RTIMEOUT = 3'd4;
+
+reg [2:0] sddat_stat = RWAIT;
+
+//enum logic [2:0] {RWAIT, RDURING, RTAIL, RDONE, RTIMEOUT} sddat_stat = RWAIT;
+
 reg [31:0] ridx   = 0;
 
-assign     rbusy  = sdcmd_stat != CMD17;
-assign     rdone  = sdcmd_stat == READING2 && sddat_stat==RDONE;
+assign     rbusy  = (sdcmd_stat != CMD17) ;
+assign     rdone  = (sdcmd_stat == READING2) && (sddat_stat==RDONE);
 
 assign card_stat = sdcmd_stat;
 
 
-sdcmd_ctrl sdcmd_ctrl_i (
+sdcmd_ctrl u_sdcmd_ctrl (
     .rstn        ( rstn         ),
     .clk         ( clk          ),
     .sdclk       ( sdclk        ),
@@ -91,11 +115,18 @@ sdcmd_ctrl sdcmd_ctrl_i (
 );
 
 
-task automatic set_cmd(input _start, input[15:0] _precnt='0, input[5:0] _cmd='0, input[31:0] _arg='0 );
+task set_cmd;
+    input [ 0:0] _start;
+    input [15:0] _precnt;
+    input [ 5:0] _cmd;
+    input [31:0] _arg;
+//task automatic set_cmd(input _start, input[15:0] _precnt='0, input[5:0] _cmd='0, input[31:0] _arg='0 );
+begin
     start  <= _start;
     precnt <= _precnt;
     cmd    <= _cmd;
     arg    <= _arg;
+end
 endtask
 
 
@@ -103,16 +134,16 @@ endtask
 
 always @ (posedge clk or negedge rstn)
     if(~rstn) begin
-        set_cmd(0);
+        set_cmd(0,0,0,0);
         clkdiv      <= SLOWCLKDIV;
-        rsectoraddr <= '0;
-        rca         <= '0;
+        rsectoraddr <= 0;
+        rca         <= 0;
         sdv1_maybe  <= 1'b0;
         card_type   <= UNKNOWN;
         sdcmd_stat  <= CMD0;
-        cmd8_cnt <= '0;
+        cmd8_cnt    <= 0;
     end else begin
-        set_cmd(0);
+        set_cmd(0,0,0,0);
         if(sdcmd_stat == READING2) begin
             if(sddat_stat==RTIMEOUT) begin
                 set_cmd(1, 96, 17, rsectoraddr);
@@ -142,7 +173,7 @@ always @ (posedge clk or negedge rstn)
                                 sdcmd_stat <= CMD55_41;
                             end else if(timeout) begin
                                 cmd8_cnt <= cmd8_cnt + 3'd1;
-                                if(cmd8_cnt == '1) begin
+                                if (cmd8_cnt == 3'b111) begin
                                     sdv1_maybe <= 1'b1;
                                     sdcmd_stat <= CMD55_41;
                                 end
@@ -167,7 +198,8 @@ always @ (posedge clk or negedge rstn)
                             end
                 CMD16   :   if(~timeout && ~syntaxe)
                                 sdcmd_stat <= CMD17;
-                READING :   if(~timeout && ~syntaxe)
+                default : //READING :   
+                            if(~timeout && ~syntaxe)
                                 sdcmd_stat <= READING2;
                             else
                                 set_cmd(1, 128, 17, rsectoraddr);
@@ -179,14 +211,14 @@ always @ (posedge clk or negedge rstn)
 always @ (posedge clk or negedge rstn)
     if(~rstn) begin
         outen   <= 1'b0;
-        outaddr <= '0;
-        outbyte <='0;
+        outaddr <= 0;
+        outbyte <= 0;
         sdclkl  <= 1'b0;
         sddat_stat <= RWAIT;
         ridx    <= 0;
     end else begin
         outen   <= 1'b0;
-        outaddr <= '0;
+        outaddr <= 0;
         sdclkl  <= sdclk;
         if(sdcmd_stat!=READING && sdcmd_stat!=READING2) begin
             sddat_stat <= RWAIT;
@@ -217,7 +249,7 @@ always @ (posedge clk or negedge rstn)
                     end
                 end
                 RTAIL   : begin
-                    if(ridx >= 8*8-1)
+                    if (ridx >= 8*8-1)
                         sddat_stat <= RDONE;
                     ridx   <= ridx + 1;
                 end

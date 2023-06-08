@@ -2,7 +2,7 @@
 //--------------------------------------------------------------------------------------------------------
 // Module  : tb_sd_file_reader
 // Type    : simulation, top
-// Standard: SystemVerilog 2005 (IEEE1800-2005)
+// Standard: Verilog 2001 (IEEE1364-2001)
 // Function: testbench for sd_file_reader
 //           connect sd_file_reader (SD-host) to sd_fake (SD-card)
 //           sd_file_reader will read sd_fake's content
@@ -45,7 +45,7 @@ always @ (posedge clk) if(outen) $display("readout byte: %c", outbyte);
 //--------------------------------------------------------------------------------------------------------
 sd_file_reader #(
     .FILE_NAME        ( "example.txt"  ),
-    .CLK_DIV          ( 0              ),
+    .CLK_DIV          ( 1              ),
     .SIMULATE         ( 1              )
 ) sd_file_reader_i (
     .rstn             ( rstn           ),
@@ -102,8 +102,8 @@ sd_fake sd_fake_i (
 // A ROM, contains a complete FAT32 partition data mirror
 //--------------------------------------------------------------------------------------------------------
 always @ (posedge sdclk)
-    if(rom_req)
-        case(rom_addr)
+    if (rom_req)
+        case (rom_addr)
         40'h00000000df: rom_data <= 16'h8200;
         40'h00000000e0: rom_data <= 16'h0003;
         40'h00000000e1: rom_data <= 16'hd50b;
